@@ -1,0 +1,4 @@
+This is a module providing support for the Joyent Manta object storage and compute fabric. 
+Included are a client capable of communicating with a Manta storage fabric, as well as a 
+Filesystem module.
+
