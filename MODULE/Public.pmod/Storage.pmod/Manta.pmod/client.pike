@@ -220,19 +220,31 @@ protected void handle_error(object d) {
   int status = d->status();
   if(has_prefix(d->con->request, "HEAD ")) // HEAD responses have no body, so don't try to read it.
   {
-
     switch(status) {
+      case 400:
+        throw(.Error.BadRequestError("Response code " + status + "\n"));
+        break;
       case 403:
         throw(.Error.AuthorizationError("Response code " + status + "\n"));
         break;
       case 404:
         throw(.Error.ResourceNotFoundError("Response code " + status + "\n"));
         break;
+      case 406:
+        throw(.Error.NotAcceptableError("Response code " + status + "\n"));
+        break;
+      case 412:
+        throw(.Error.PreconditionFailedError("Response code " + status + "\n"));
+        break;
+      case 503:
+        throw(.Error.ServiceUnavailableError("Response code " + status + "\n"));
+        break;
       default:
        throw(.Error.MantaError("Response code " + status + "\n"));		 
         break;
     } 
   }
+  
   string ct = get_content_type(d);
   if(ct != "application/json")
     throw(.Error.MantaError("Invalid response content-type: " + ct + "\n"));		 
