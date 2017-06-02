@@ -43,6 +43,7 @@ int put_directory(string directory) {
 	else return 0;	
 }
 
+//!
 function(string:int) delete_object = delete_directory;
 
 //!
@@ -110,7 +111,7 @@ int put_object(string path, string content, string content_type, void|mapping he
 	  h["content-type"] = content_type;
 	 h["content-MD5"] = MIME.encode_base64(Crypto.MD5.hash(content));
 	
-	if(tags) {
+	if(headers) {
 		h = headers + h;
  	}
     mixed d = session->do_method_url("PUT", (string)op, 0, content, h)->wait();

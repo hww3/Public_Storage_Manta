@@ -1,7 +1,31 @@
 //!
 
-protected Crypto.RSA.State
-parse_private_key(string key) {
+//! Joyent Public Cloud Manta Endpoint
+constant MANTA_US_EAST = "https://us-east.manta.joyent.com";
+
+//! create a Manta client using SSH key files on disk.
+//! 
+//! @param url
+//!   endpoint for a Manta instance.
+//! @param manta_username
+//!   the manta account to access
+//! @param ssh_private_key_path
+//!   path to a SSH private key file that is provisioned in the manta account
+//! @param key_password
+//!   if the private key is password protected, the password; otherwise null.
+.client client_from_keys(string url, string manta_username, string ssh_private_key_path, string|void key_password) {
+	if(!file_stat(ssh_private_key_path)) {
+		throw(Error.Generic("SSH private key " + ssh_private_key_path + " does not exist.\n"));
+	}
+	if(!file_stat(ssh_private_key_path + ".pub")) {
+		throw(Error.Generic("SSH private key " + ssh_private_key_path + ".pub does not exist.\n"));
+	}
+	
+	return .client(url, manta_username, Stdio.read_file(ssh_private_key_path), Stdio.read_file(ssh_private_key_path + ".pub"), key_password);
+}
+
+
+protected Crypto.RSA.State parse_private_key(string key) {
 Standards.ASN1.Types.Object a = Standards.ASN1.Decode.simple_der_decode(key);
 
   if (!a || (a->type_name != "SEQUENCE"))
@@ -37,6 +61,7 @@ object load_ssh_private_key(string contents, string|void password) {
     throw(Error.Generic("Private key not found\n"));
 	if(part->headers["dek-info"] && part->headers["dek-info"] && search(part->headers["proc-type"], "ENCRYPTED") != -1)
 	{
+		if(!password) throw(Error.Generic("Private key is encrypted but no password was specified.\n"));
 		key = Standards.PEM.decrypt_body(part->headers["dek-info"], key, password);
 	}
   // Unclear why the identical code in Standards.PKCS doesn't work
