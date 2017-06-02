@@ -6,8 +6,10 @@ protected string login;
 
 protected int query_size = 256;
 
-Protocols.HTTP.Session session = Protocols.HTTP.Session();
+constant CACHE_TIMEOUT = 60; // 1 minute
 
+Protocols.HTTP.Session session = Protocols.HTTP.Session();
+Cache.cache exist_cache = Cache.cache(Cache.Storage.Memory(), Cache.Policy.Timed(CACHE_TIMEOUT));
 //! @param private_key
 //!   a string containing the contents of an SSH private key file (RSA)
 //!
@@ -79,7 +81,7 @@ mixed list_directory(string directory) {
 }
 
 //!
-mixed get_object(string path, string content) {
+mixed get_object(string path) {
     Standards.URI op = Standards.URI(endpoint); 
     op->path = "/" + login + "/" + path;
 	
@@ -154,6 +156,42 @@ int put_snaplink(string destPath, string srcPath) {
 }
 
 
+int is_directory(string path) {
+	mixed obj;
+	if(catch(obj= head_object(path)))
+		return 0;
+	if(get_content_type(obj) == "application/x-json-stream" && 
+		get_content_subtype(obj) == "directory") return 1;
+		else return 0;
+}
+
+protected mixed head_object(string path) {
+    Standards.URI op = Standards.URI(endpoint); 
+    op->path = "/" + login + "/" + path;
+	
+	mapping h = Public.Storage.Manta.generate_authorization_header(keyId, key);
+	
+   mixed d = session->do_method_url("HEAD", (string)op, 0, 0, h);
+//    mixed d = Protocols.HTTP.do_method("HEAD", (string)op, 0, h);
+	
+	int status = d->status();
+	werror("status: " + status + "\n");
+    if(status == 200) return d; // success!
+	else if(status == 404) throw(Error.Generic("Not found\n"));
+    else if(status >= 400) {
+        string ct = get_content_type(d);
+		werror("ct: %O\n", ct);
+        if(ct != "application/json")
+          throw(Error.Generic("Invalid response content-type: " + ct + "\n"));		 
+		  werror("data: %O\n", d->con->data());
+       mixed res = Standards.JSON.decode(d->data());
+	   werror("res: %O\n", res);
+       throw(Error.Generic(status + " " + res->message + "\n"));
+    }
+	else return 0;	
+}
+
+
 protected ADT.List get_paged_result(Standards.URI uri, int|void max, mixed|void current, ADT.List|void list) {
 //	werror("get_paged_result(%O, %O, %O, %O)\n", uri, max, current, list);
     mapping v = (["limit": query_size]);
@@ -200,7 +238,6 @@ protected ADT.List get_paged_result(Standards.URI uri, int|void max, mixed|void 
         mixed res = Standards.JSON.decode(d->data());
         throw(Error.Generic(status + " " + res->message + "\n"));
      }
-
 }
 
 protected string get_content_type(object query) {
@@ -208,4 +245,16 @@ protected string get_content_type(object query) {
   if(!ct) return "";
   
   return String.trim_whites((ct/";")[0]);
+}
+
+protected string get_content_subtype(object query) {
+  string ct = query->headers()["content-type"];
+  if(!ct) return "";
+
+  array c = ct/";";
+  if(sizeof(c) < 2) return "";
+  
+  ct = String.trim_whites(c[1]);
+  if(!has_prefix(ct, "type")) return "";
+  return String.trim_whites((ct/"=")[1]);
 }
