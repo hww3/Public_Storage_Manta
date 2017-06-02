@@ -27,15 +27,18 @@ protected Crypto.RSA.State _parse_private_key(Standards.ASN1.Types.Sequence seq)
 //!    the contents of an SSH private key file.
 //! @returns
 //!   the fingerprint of the public key.
-object load_ssh_private_key(string contents) {
+object load_ssh_private_key(string contents, string|void password) {
   object part, rsa;
   string key;
   
-  object msg = Tools.PEM.pem_msg()->init(contents);
-  part = msg->parts["RSA PRIVATE KEY"];
-  if (!part || !(key = part->decoded_body()))
+  object msg = Standards.PEM.Messages(contents);
+  part = msg->parts["RSA PRIVATE KEY"][0];
+  if (!part || !(key = part->body))
     throw(Error.Generic("Private key not found\n"));
-  
+	if(part->headers["dek-info"] && part->headers["dek-info"] && search(part->headers["proc-type"], "ENCRYPTED") != -1)
+	{
+		key = Standards.PEM.decrypt_body(part->headers["dek-info"], key, password);
+	}
   // Unclear why the identical code in Standards.PKCS doesn't work
   rsa = parse_private_key(key);
     if(!rsa) throw(Error.Generic("Private key not valid\n"));
