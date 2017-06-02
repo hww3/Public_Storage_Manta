@@ -35,13 +35,7 @@ int put_directory(string directory) {
 	int status = d->status();
 	
     if(status == 204) return 1; // success!
-    else if(status >= 400) {
-        string ct = get_content_type(d);
-        if(ct != "application/json")
-          throw(Error.Generic("Invalid response content-type: " + ct + "\n"));		 
-       mixed res = Standards.JSON.decode(d->data());
-       throw(Error.Generic(status + " " + res->message + "\n"));
-    }
+    else if(status >= 400) handle_error(d);
 	else return 0;	
 }
 
@@ -61,13 +55,7 @@ int delete_directory(string directory) {
 	int status = d->status();
 	
     if(status == 204) return 1; // success!
-    else if(status >= 400) {
-        string ct = get_content_type(d);
-        if(ct != "application/json")
-          throw(Error.Generic("Invalid response content-type: " + ct + "\n"));		 
-       mixed res = Standards.JSON.decode(d->data());
-       throw(Error.Generic(status + " " + res->message + "\n"));
-    }
+    else if(status >= 400) handle_error(d);
 	else return 0;	
 }
 
@@ -92,16 +80,9 @@ mixed get_object(string path) {
 	int status = d->status();
 	
     if(status == 200) return d; // success!
-    else if(status >= 400) {
-        string ct = get_content_type(d);
-        if(ct != "application/json")
-          throw(Error.Generic("Invalid response content-type: " + ct + "\n"));		 
-       mixed res = Standards.JSON.decode(d->data());
-       throw(Error.Generic(status + " " + res->message + "\n"));
-    }
+    else if(status >= 400) handle_error(d);
 	else return 0;	
 }
-
 
 //!
 int put_object(string path, string content, string content_type, void|mapping headers) {
@@ -121,13 +102,7 @@ int put_object(string path, string content, string content_type, void|mapping he
 	int status = d->status();
 	
     if(status == 204) return 1; // success!
-    else if(status >= 400) {
-        string ct = get_content_type(d);
-        if(ct != "application/json")
-          throw(Error.Generic("Invalid response content-type: " + ct + "\n"));		 
-       mixed res = Standards.JSON.decode(d->data());
-       throw(Error.Generic(status + " " + res->message + "\n"));
-    }
+    else if(status >= 400) handle_error(d);
 	else return 0;	
 }
 
@@ -145,24 +120,25 @@ int put_snaplink(string destPath, string srcPath) {
 	int status = d->status();
 	
     if(status == 204) return 1; // success!
-    else if(status >= 400) {
-        string ct = get_content_type(d);
-        if(ct != "application/json")
-          throw(Error.Generic("Invalid response content-type: " + ct + "\n"));		 
-       mixed res = Standards.JSON.decode(d->data());
-       throw(Error.Generic(status + " " + res->message + "\n"));
-    }
+    else if(status >= 400) handle_error(d);
 	else return 0;	
 }
 
-
 int is_directory(string path) {
 	mixed obj;
-	if(catch(obj= head_object(path)))
-		return 0;
+obj = head_object(path);
+//	if(catch(obj = head_object(path)))
+//		return 0;
 	if(get_content_type(obj) == "application/x-json-stream" && 
 		get_content_subtype(obj) == "directory") return 1;
 		else return 0;
+}
+
+int exists(string path) {
+	mixed obj;
+	if(catch(obj = head_object(path)))
+		return 0;
+	return 1;
 }
 
 protected mixed head_object(string path) {
@@ -175,22 +151,12 @@ protected mixed head_object(string path) {
 //    mixed d = Protocols.HTTP.do_method("HEAD", (string)op, 0, h);
 	
 	int status = d->status();
-	werror("status: " + status + "\n");
+	
     if(status == 200) return d; // success!
-	else if(status == 404) throw(Error.Generic("Not found\n"));
-    else if(status >= 400) {
-        string ct = get_content_type(d);
-		werror("ct: %O\n", ct);
-        if(ct != "application/json")
-          throw(Error.Generic("Invalid response content-type: " + ct + "\n"));		 
-		  werror("data: %O\n", d->con->data());
-       mixed res = Standards.JSON.decode(d->data());
-	   werror("res: %O\n", res);
-       throw(Error.Generic(status + " " + res->message + "\n"));
-    }
+	//else if(status == 404) throw(Error.Generic("Not found\n"));
+    else if(status >= 400) handle_error(d);
 	else return 0;	
 }
-
 
 protected ADT.List get_paged_result(Standards.URI uri, int|void max, mixed|void current, ADT.List|void list) {
 //	werror("get_paged_result(%O, %O, %O, %O)\n", uri, max, current, list);
@@ -198,7 +164,7 @@ protected ADT.List get_paged_result(Standards.URI uri, int|void max, mixed|void 
     
     uri->query="limit=" + query_size;
 	if(current) uri->query += ("&marker=" + current);
-//	werror("uri: " + (string)uri + "\n");
+
     mixed d = session->do_method_url("GET", (string)uri, 0, 0,Public.Storage.Manta.generate_authorization_header(keyId, key))->wait();
 
     if(!list) list = ADT.List();
@@ -216,28 +182,19 @@ protected ADT.List get_paged_result(Standards.URI uri, int|void max, mixed|void 
          foreach(d->data()/"\n"; int r; string j) {
          if(!sizeof(j)) continue;
             mixed row = Standards.JSON.decode(j);
-			if(current && !r) continue; // skip the first row on continuation queries. 
+			if(current && !r && sizeof(list)) continue; // skip the first row on continuation queries. 
 			current = row->name;
-			//werror("%O\n", row);
             list->append(row);
          }
-//         werror("total: %O", d->headers["result-set-size"]);
 		
 		 if(sizeof(list) < total)
 		 {
-//			 werror("getting next page\n");
 			 list = get_paged_result(uri, max, current, list);
 		 }
 		 
          return list;
      }
-     else if(status >= 400) {
-         string ct = get_content_type(d);
-         if(ct != "application/json")
-           throw(Error.Generic("Invalid response content-type: " + ct + "\n"));		 
-        mixed res = Standards.JSON.decode(d->data());
-        throw(Error.Generic(status + " " + res->message + "\n"));
-     }
+     else if(status >= 400) handle_error(d);
 }
 
 protected string get_content_type(object query) {
@@ -257,4 +214,31 @@ protected string get_content_subtype(object query) {
   ct = String.trim_whites(c[1]);
   if(!has_prefix(ct, "type")) return "";
   return String.trim_whites((ct/"=")[1]);
+}
+
+protected void handle_error(object d) {
+  int status = d->status();
+  if(has_prefix(d->con->request, "HEAD ")) // HEAD responses have no body, so don't try to read it.
+  {
+
+    switch(status) {
+      case 403:
+        throw(.Error.AuthorizationError("Response code " + status + "\n"));
+        break;
+      case 404:
+        throw(.Error.ResourceNotFoundError("Response code " + status + "\n"));
+        break;
+      default:
+       throw(.Error.MantaError("Response code " + status + "\n"));		 
+        break;
+    } 
+  }
+  string ct = get_content_type(d);
+  if(ct != "application/json")
+    throw(.Error.MantaError("Invalid response content-type: " + ct + "\n"));		 
+  mixed res = Standards.JSON.decode(d->data());
+  
+  program ep = .Error[res->code + "Error"];
+  if(!ep) ep = .Error.MantaError;
+  throw(ep(res->message + "\n"));
 }
