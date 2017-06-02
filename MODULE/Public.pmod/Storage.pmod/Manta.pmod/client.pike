@@ -6,10 +6,11 @@ protected string login;
 
 protected int query_size = 256;
 
-constant CACHE_TIMEOUT = 60; // 1 minute
+constant CACHE_TIMEOUT = 30; // 30 seconds
 
 Protocols.HTTP.Session session = Protocols.HTTP.Session();
-Cache.cache exist_cache = Cache.cache(Cache.Storage.Memory(), Cache.Policy.Timed(CACHE_TIMEOUT));
+Cache.cache head_cache = Cache.cache(Cache.Storage.Memory(), Cache.Policy.Timed(CACHE_TIMEOUT));
+
 //! @param private_key
 //!   a string containing the contents of an SSH private key file (RSA)
 //!
@@ -126,9 +127,11 @@ int put_snaplink(string destPath, string srcPath) {
 
 int is_directory(string path) {
 	mixed obj;
-obj = head_object(path);
-//	if(catch(obj = head_object(path)))
-//		return 0;
+    mixed err;
+    
+	if((err = catch(obj = head_object(path))) && err->is_resource_not_found_error)
+		return 0;
+	else if(err) throw(err);
 	if(get_content_type(obj) == "application/x-json-stream" && 
 		get_content_subtype(obj) == "directory") return 1;
 		else return 0;
@@ -136,6 +139,7 @@ obj = head_object(path);
 
 int exists(string path) {
 	mixed obj;
+
 	if(catch(obj = head_object(path)))
 		return 0;
 	return 1;
@@ -144,16 +148,23 @@ int exists(string path) {
 protected mixed head_object(string path) {
     Standards.URI op = Standards.URI(endpoint); 
     op->path = "/" + login + "/" + path;
-	
+	werror("head_object(%O)\n", op);
 	mapping h = Public.Storage.Manta.generate_authorization_header(keyId, key);
+
+   object cache_entry = head_cache->lookup(path);
+ //  werror("cache_entry: %O\n", cache_entry);
+   if(cache_entry) return cache_entry;
 	
    mixed d = session->do_method_url("HEAD", (string)op, 0, 0, h);
 //    mixed d = Protocols.HTTP.do_method("HEAD", (string)op, 0, h);
 	
 	int status = d->status();
-	
-    if(status == 200) return d; // success!
-	//else if(status == 404) throw(Error.Generic("Not found\n"));
+
+    if(status == 200) {
+      d = headent(d);
+      head_cache->store(path, d);
+      return d; // success!
+    }
     else if(status >= 400) handle_error(d);
 	else return 0;	
 }
@@ -253,4 +264,20 @@ protected void handle_error(object d) {
   program ep = .Error[res->code + "Error"];
   if(!ep) ep = .Error.MantaError;
   throw(ep(res->message + "\n"));
+}
+
+
+class headent {
+  private mapping _headers;
+  private string _data = "";
+  private int _status;
+  
+  void create(object d) {
+     _headers = d->headers();
+     _status = d->status();
+  }
+  
+  string data() { return _data; }
+  int status() { return _status; }
+  mapping headers() { return _headers; }
 }
