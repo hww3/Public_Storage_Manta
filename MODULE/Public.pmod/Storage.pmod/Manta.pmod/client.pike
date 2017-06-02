@@ -25,8 +25,7 @@ void create(string url, string username, string private_key, string public_key, 
 
 //!
 int put_directory(string directory) {
-    Standards.URI op = Standards.URI(endpoint); 
-    op->path = "/" + login + "/" + directory;
+    Standards.URI op = generate_uri(directory);
 	
 	mapping h = Public.Storage.Manta.generate_authorization_header(keyId, key);
 	h["content-type"] = "application/json; type=directory";
@@ -45,8 +44,7 @@ function(string:int) delete_object = delete_directory;
 
 //!
 int delete_directory(string directory) {
-    Standards.URI op = Standards.URI(endpoint); 
-    op->path = "/" + login + "/" + directory;
+    Standards.URI op = generate_uri(directory);
 	
 	mapping h = Public.Storage.Manta.generate_authorization_header(keyId, key);
 	h["content-type"] = "application/json; type=directory";
@@ -60,20 +58,17 @@ int delete_directory(string directory) {
 	else return 0;	
 }
 
-
 //!
 mixed list_directory(string directory) {
-   Standards.URI op = Standards.URI(endpoint); 
-   op->path = "/" + login + "/" + directory;
-   mixed r = get_paged_result(op);
+
+   mixed r = get_paged_result(directory);
    return (array)r;
 }
 
 //!
 mixed get_object(string path) {
-    Standards.URI op = Standards.URI(endpoint); 
-    op->path = "/" + login + "/" + path;
-	
+    Standards.URI op = generate_uri(path);
+
 	mapping h = Public.Storage.Manta.generate_authorization_header(keyId, key);
 	
     mixed d = session->do_method_url("GET", (string)op, 0, 0, h)->wait();
@@ -87,8 +82,7 @@ mixed get_object(string path) {
 
 //!
 int put_object(string path, string content, string content_type, void|mapping headers) {
-    Standards.URI op = Standards.URI(endpoint); 
-    op->path = "/" + login + "/" + path;
+    Standards.URI op = generate_uri(path);
 	
 	mapping h = Public.Storage.Manta.generate_authorization_header(keyId, key);
 	if(content_type) 
@@ -108,9 +102,21 @@ int put_object(string path, string content, string content_type, void|mapping he
 }
 
 //!
+int put_metadata(string path, mapping headers) {
+    Standards.URI op = generate_uri(path, (["metadata": "true"]));
+    
+    mapping h = .generate_authorization_header(keyId, key);
+    mixed d = session->do_method_url("PUT", (string)op, 0, 0, h)->wait();
+	
+	int status = d->status();
+	
+    if(status == 204) return 1; // success!
+    else if(status >= 400) handle_error(d);
+	else return 0;	
+}
+//!
 int put_snaplink(string destPath, string srcPath) {
-    Standards.URI op = Standards.URI(endpoint); 
-    op->path = "/" + login + "/" + destPath;
+    Standards.URI op = generate_uri(destPath);
 	
 	mapping h = Public.Storage.Manta.generate_authorization_header(keyId, key);
 
@@ -146,36 +152,35 @@ int exists(string path) {
 }
 
 protected mixed head_object(string path) {
-    Standards.URI op = Standards.URI(endpoint); 
-    op->path = "/" + login + "/" + path;
-	werror("head_object(%O)\n", op);
-	mapping h = Public.Storage.Manta.generate_authorization_header(keyId, key);
+    Standards.URI op = generate_uri(path);
 
-   object cache_entry = head_cache->lookup(path);
- //  werror("cache_entry: %O\n", cache_entry);
+   object cache_entry = head_cache->lookup(op->path);
+
    if(cache_entry) return cache_entry;
+
+   mapping h = Public.Storage.Manta.generate_authorization_header(keyId, key);
 	
    mixed d = session->do_method_url("HEAD", (string)op, 0, 0, h);
-//    mixed d = Protocols.HTTP.do_method("HEAD", (string)op, 0, h);
 	
 	int status = d->status();
 
     if(status == 200) {
       d = headent(d);
-      head_cache->store(path, d);
+      head_cache->store(op->path, d);
       return d; // success!
     }
     else if(status >= 400) handle_error(d);
 	else return 0;	
 }
 
-protected ADT.List get_paged_result(Standards.URI uri, int|void max, mixed|void current, ADT.List|void list) {
+protected ADT.List get_paged_result(string path, int|void max, mixed|void current, ADT.List|void list) {
 //	werror("get_paged_result(%O, %O, %O, %O)\n", uri, max, current, list);
-    mapping v = (["limit": query_size]);
-    
-    uri->query="limit=" + query_size;
-	if(current) uri->query += ("&marker=" + current);
 
+    mapping v = (["limit": query_size]);
+    if(current) v->marker = current;
+    
+    Standards.URI uri = generate_uri(path, v);
+    
     mixed d = session->do_method_url("GET", (string)uri, 0, 0,Public.Storage.Manta.generate_authorization_header(keyId, key))->wait();
 
     if(!list) list = ADT.List();
@@ -200,12 +205,29 @@ protected ADT.List get_paged_result(Standards.URI uri, int|void max, mixed|void 
 		
 		 if(sizeof(list) < total)
 		 {
-			 list = get_paged_result(uri, max, current, list);
+			 list = get_paged_result(path, max, current, list);
 		 }
 		 
          return list;
      }
      else if(status >= 400) handle_error(d);
+}
+
+// assumes that var keys are http valid without as-is; values will be encoded.
+protected Standards.URI generate_uri(string path, mapping|void vars) {
+    Standards.URI op = Standards.URI(endpoint); 
+    op->path = Stdio.append_path("/" + login, path);
+    
+    if(vars) {
+      array x = allocate(sizeof(vars));
+      int i = 0;
+      foreach(vars; string k; string v)
+        x[i++] = k + "=" + Protocols.HTTP.uri_encode((string)v);
+        
+      op->query = x*"&";
+    }
+    
+    return op;
 }
 
 protected string get_content_type(object query) {
