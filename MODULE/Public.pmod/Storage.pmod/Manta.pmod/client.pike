@@ -114,6 +114,7 @@ int put_metadata(string path, mapping headers) {
     else if(status >= 400) handle_error(d);
 	else return 0;	
 }
+
 //!
 int put_snaplink(string destPath, string srcPath) {
     Standards.URI op = generate_uri(destPath);
@@ -131,6 +132,7 @@ int put_snaplink(string destPath, string srcPath) {
 	else return 0;	
 }
 
+//!
 int is_directory(string path) {
 	mixed obj;
     mixed err;
@@ -143,12 +145,166 @@ int is_directory(string path) {
 		else return 0;
 }
 
+//!
 int exists(string path) {
 	mixed obj;
-
-	if(catch(obj = head_object(path)))
+    mixed err;
+    
+    if((err = catch(obj = head_object(path))) && err->is_resource_not_found_error)
 		return 0;
+    else if(err) 
+        throw(err);
 	return 1;
+}
+
+//!
+Standards.URI create_job(string|void name, array(.JobPhase) phases) {
+    Standards.URI op = generate_uri("/jobs");
+  	mapping h = (["content-type": "application/json"]);
+  	
+  	mapping job = (["phases": phases]);
+  	if(name) job->name = name;
+    mixed d = do_method("POST", op, 0, Standards.JSON.encode(job), h);
+	
+	int status = d->status();
+	
+    if(status == 201) return Standards.URI(d->headers()->location, op); // success!
+	else return 0;	
+}
+
+//! @param input_paths
+//!   an array of strings pointing to paths
+int add_job_inputs(Standards.URI|string job_uri, array(string) input_paths) {
+  if(stringp(job_uri)) job_uri = generate_uri("/jobs/" + job_uri);
+  else job_uri = Standards.URI((string)job_uri); // not sure why we need to do this
+  
+  job_uri->path += "/live/in";
+  
+  mixed d = do_method("POST", job_uri, 0, input_paths * "\n");
+  
+	int status = d->status();
+	
+    if(status == 204) return 1; // success!
+	else return 0;	
+}
+
+//!
+int end_job_input(Standards.URI|string job_uri) {
+  if(stringp(job_uri)) job_uri = generate_uri("/jobs/" + job_uri);
+  else job_uri = Standards.URI((string)job_uri); // not sure why we need to do this
+  
+  job_uri->path += "/live/in/end";
+  
+  mixed d = do_method("POST", job_uri);
+  
+	int status = d->status();
+	
+    if(status == 202) return 1; // success!
+	else return 0;	
+}
+
+//!
+int cancel_job(Standards.URI|string job_uri) {
+  if(stringp(job_uri)) job_uri = generate_uri("/jobs/" + job_uri);
+  else job_uri = Standards.URI((string)job_uri); // not sure why we need to do this
+  
+  job_uri->path += "/live/cancel";
+  
+  mixed d = do_method("POST", job_uri);
+  
+	int status = d->status();
+	
+    if(status == 202) return 1; // success!
+	else return 0;	
+}
+
+//!
+int delete_job(Standards.URI|string job_uri) {
+  if(stringp(job_uri)) job_uri = generate_uri("/jobs/" + job_uri);
+  else job_uri = Standards.URI(job_uri);
+  
+  // job_uri->path += "/live/cancel";
+  
+  mixed d = do_method("DELETE", job_uri);
+  
+	int status = d->status();
+	werror("status %O\n", status);
+    if(status == 202) return 1; // success!
+	else return 0;	
+}
+
+//!
+array(mapping) list_jobs(int|void live) {
+   mixed r = get_paged_result("jobs");
+   return (array)r;
+}
+
+//!
+mapping get_job(Standards.URI|string job_uri) {
+  return get_job_data(job_uri, "/live/status");
+}
+
+//!
+array(string) get_job_input(Standards.URI|string job_uri) {
+  return get_job_data(job_uri, "/live/in");
+}
+
+//!
+array(string) get_job_output(Standards.URI|string job_uri) {
+  return get_job_data(job_uri, "/live/out");
+}
+
+//!
+array(string) get_job_failures(Standards.URI|string job_uri) {
+  return get_job_data(job_uri, "/live/fail");
+}
+
+
+//!
+array(mapping) get_job_errors(Standards.URI|string job_uri) {
+  string res = get_job_data(job_uri, "/live/fail");
+  
+  if(!res) return 0;
+  
+  ADT.List list = ADT.List();
+  foreach(res; int r; string j) {
+   if(!sizeof(j)) continue;
+   mixed row = Standards.JSON.decode(j);
+   list->append(row);
+  }
+  
+  return (array)list;
+}
+
+protected mixed get_job_data(Standards.URI|string job_uri, string subpath, int|void raw) {
+  if(stringp(job_uri)) job_uri = generate_uri("/jobs/" + job_uri);
+  else job_uri = Standards.URI((string)job_uri); // not sure why we need to do this
+  
+  job_uri->path += subpath;
+  
+  mixed d = do_method("GET", job_uri);
+  
+	int status = d->status();
+    if(status == 204 || status == 200) {
+       array res = (d->data()/"\n") - ({""}); // success!
+       if(raw) return res; 
+       int x = sizeof(login) +1;
+       foreach(res; int i; string v)
+         res[i] = v[x..];
+         
+        return res; 
+    }
+	else return 0;	
+}
+
+protected mixed do_method(string method, Standards.URI op, mapping|void vars, string|void data, mapping|void headers) {
+  mapping h = Public.Storage.Manta.generate_authorization_header(keyId, key);
+  if(headers) headers += h;
+  else headers = h;
+
+  mixed d = session->do_method_url(method, (string)op, vars, data, headers)->wait();
+  if(d->status() >= 400) handle_error(d);
+  return d;
 }
 
 protected mixed head_object(string path) {
