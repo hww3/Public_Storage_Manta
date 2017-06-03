@@ -24,7 +24,6 @@ constant MANTA_US_EAST = "https://us-east.manta.joyent.com";
 	return .client(url, manta_username, Stdio.read_file(ssh_private_key_path), Stdio.read_file(ssh_private_key_path + ".pub"), key_password);
 }
 
-
 protected Crypto.RSA.State parse_private_key(string key) {
 Standards.ASN1.Types.Object a = Standards.ASN1.Decode.simple_der_decode(key);
 

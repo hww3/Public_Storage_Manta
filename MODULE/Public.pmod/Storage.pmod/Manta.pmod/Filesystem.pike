@@ -39,7 +39,7 @@ protected void create(.client manta_client, void|string directory,  // default: 
   if(!fast)
   {
     if(!directory || directory=="" || directory[0]!='/')
-      directory = combine_path("/", directory||"");
+      directory = combine_path("/", directory||manta_client->get_login());
 
     while( sizeof(directory) && directory[0] == '/' )
       directory = directory[1..];
@@ -122,18 +122,18 @@ array(string) get_dir(void|string directory, void|string|array(string) globs)
 {
   directory = directory ? combine_path(wd, directory) : wd;
 
-  array(mapping) y = client->list_directory(combine_path("/",root,directory));
+  array(.Entry) y = client->list_directory(combine_path("/",root,directory));
   if(!globs)
-    return y->name;
+    return y->get_name();
   else if(stringp(globs))
-    return glob(globs, y->name);
+    return glob(globs, y->get_name());
   else
   {
     array(string) p = ({});
     foreach(globs, string g)
     {
       array(string) z;
-      p += (z = glob(g, y->name));
+      p += (z = glob(g, y->get_name()));
       y -= z;
     }
     return p;

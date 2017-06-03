@@ -11,6 +11,8 @@ constant CACHE_TIMEOUT = 30; // 30 seconds
 Protocols.HTTP.Session session = Protocols.HTTP.Session();
 Cache.cache head_cache = Cache.cache(Cache.Storage.Memory(), Cache.Policy.Timed(CACHE_TIMEOUT));
 
+string get_login() { return login; }
+
 //! @param private_key
 //!   a string containing the contents of an SSH private key file (RSA)
 //!
@@ -83,7 +85,7 @@ int delete_directory(string directory) {
 //! 
 //! @note
 //!  all paths are relative to the user's account root.
-mixed list_directory(string directory) {
+array(.Entry) list_directory(string directory) {
 
    mixed r = get_paged_result(directory);
    return (array)r;
@@ -171,7 +173,7 @@ int put_snaplink(string destPath, string srcPath) {
 	
 	mapping h = Public.Storage.Manta.generate_authorization_header(keyId, key);
 
-    h["location"] = "/" + login + "/" + srcPath;	
+    h["location"] = srcPath;	
     h["content-type"] = "application/json; type=link";
     mixed d = session->do_method_url("PUT", (string)op, 0, 0, h)->wait();
 	
@@ -225,7 +227,7 @@ int exists(string path) {
 
 //!
 Standards.URI create_job(string|void name, array(.JobPhase) phases) {
-    Standards.URI op = generate_uri("/jobs");
+    Standards.URI op = generate_uri("~~/jobs");
   	mapping h = (["content-type": "application/json"]);
   	
   	mapping job = (["phases": phases]);
@@ -241,7 +243,7 @@ Standards.URI create_job(string|void name, array(.JobPhase) phases) {
 //! @param input_paths
 //!   an array of strings pointing to paths
 int add_job_inputs(Standards.URI|string job_uri, array(string) input_paths) {
-  if(stringp(job_uri)) job_uri = generate_uri("/jobs/" + job_uri);
+  if(stringp(job_uri)) job_uri = generate_uri("~~/jobs/" + job_uri);
   else job_uri = Standards.URI((string)job_uri); // not sure why we need to do this
   
   job_uri->path += "/live/in";
@@ -256,7 +258,7 @@ int add_job_inputs(Standards.URI|string job_uri, array(string) input_paths) {
 
 //!
 int end_job_input(Standards.URI|string job_uri) {
-  if(stringp(job_uri)) job_uri = generate_uri("/jobs/" + job_uri);
+  if(stringp(job_uri)) job_uri = generate_uri("~~/jobs/" + job_uri);
   else job_uri = Standards.URI((string)job_uri); // not sure why we need to do this
   
   job_uri->path += "/live/in/end";
@@ -271,7 +273,7 @@ int end_job_input(Standards.URI|string job_uri) {
 
 //!
 int cancel_job(Standards.URI|string job_uri) {
-  if(stringp(job_uri)) job_uri = generate_uri("/jobs/" + job_uri);
+  if(stringp(job_uri)) job_uri = generate_uri("~~/jobs/" + job_uri);
   else job_uri = Standards.URI((string)job_uri); // not sure why we need to do this
   
   job_uri->path += "/live/cancel";
@@ -286,7 +288,7 @@ int cancel_job(Standards.URI|string job_uri) {
 
 //!
 int delete_job(Standards.URI|string job_uri) {
-  if(stringp(job_uri)) job_uri = generate_uri("/jobs/" + job_uri);
+  if(stringp(job_uri)) job_uri = generate_uri("~~/jobs/" + job_uri);
   else job_uri = Standards.URI(job_uri);
   
   // job_uri->path += "/live/cancel";
@@ -294,20 +296,25 @@ int delete_job(Standards.URI|string job_uri) {
   mixed d = do_method("DELETE", job_uri);
   
 	int status = d->status();
-	werror("status %O\n", status);
+//	werror("status %O\n", status);
     if(status == 202) return 1; // success!
 	else return 0;	
 }
 
 //!
-array(mapping) list_jobs(int|void live) {
-   mixed r = get_paged_result("jobs");
+array(.Entry) list_jobs(int|void live) {
+    mixed vars;
+   if(live)
+   vars = (["state": "running"]);
+
+   mixed r = get_paged_result("~~/jobs", vars);
    return (array)r;
 }
 
 //!
 mapping get_job(Standards.URI|string job_uri) {
-  return get_job_data(job_uri, "/live/status");
+  mixed m = get_job_data(job_uri, "/live/status");
+  if(m) return Standards.JSON.decode(m[0]);
 }
 
 //!
@@ -332,6 +339,7 @@ array(mapping) get_job_errors(Standards.URI|string job_uri) {
   
   if(!res) return 0;
   
+  // we can't just replace entries because there could be empties.
   ADT.List list = ADT.List();
   foreach(res; int r; string j) {
    if(!sizeof(j)) continue;
@@ -343,7 +351,7 @@ array(mapping) get_job_errors(Standards.URI|string job_uri) {
 }
 
 protected mixed get_job_data(Standards.URI|string job_uri, string subpath, int|void raw) {
-  if(stringp(job_uri)) job_uri = generate_uri("/jobs/" + job_uri);
+  if(stringp(job_uri)) job_uri = generate_uri("~~/jobs/" + job_uri);
   else job_uri = Standards.URI((string)job_uri); // not sure why we need to do this
   
   job_uri->path += subpath;
@@ -352,13 +360,8 @@ protected mixed get_job_data(Standards.URI|string job_uri, string subpath, int|v
   
 	int status = d->status();
     if(status == 204 || status == 200) {
-       array res = (d->data()/"\n") - ({""}); // success!
-       if(raw) return res; 
-       int x = sizeof(login) +1;
-       foreach(res; int i; string v)
-         res[i] = v[x..];
-         
-        return res; 
+       array res = (d->data()/"\n") - ({""}); // success!         
+       return res; 
     }
 	else return 0;	
 }
@@ -395,13 +398,13 @@ protected mixed head_object(string path) {
 	else return 0;	
 }
 
-protected ADT.List get_paged_result(string path, int|void max, mixed|void current, ADT.List|void list) {
+protected ADT.List get_paged_result(string path, mapping|void vars, int|void max, mixed|void current, ADT.List|void list) {
 //	werror("get_paged_result(%O, %O, %O, %O)\n", uri, max, current, list);
 
     mapping v = (["limit": query_size]);
     if(current) v->marker = current;
     
-    Standards.URI uri = generate_uri(path, v);
+    Standards.URI uri = generate_uri(path, (vars?v + vars:v));
     
     mixed d = session->do_method_url("GET", (string)uri, 0, 0,Public.Storage.Manta.generate_authorization_header(keyId, key))->wait();
 
@@ -410,16 +413,16 @@ protected ADT.List get_paged_result(string path, int|void max, mixed|void curren
     int status = d->status();
 
     if(status == 200) {
-        string ct = get_content_type(d);
-        if(ct != "application/x-json-stream")
-          throw(Error.Generic("Invalid response content-type: " + ct + "\n"));
-         
          int total = (int)(d->headers()["result-set-size"]);
+		 if(!total) return list; // no results
+         string ct = get_content_type(d);         
+         if(ct != "application/x-json-stream")
+           throw(Error.Generic("Invalid response content-type: " + ct + "\n"));
 		 if(max && max < total) total = max;
-		 
+		 path = uri->path;
          foreach(d->data()/"\n"; int r; string j) {
          if(!sizeof(j)) continue;
-            mixed row = Standards.JSON.decode(j);
+            mixed row = .Entry(Standards.JSON.decode(j), path);
 			if(current && !r && sizeof(list)) continue; // skip the first row on continuation queries. 
 			current = row->name;
             list->append(row);
@@ -427,7 +430,7 @@ protected ADT.List get_paged_result(string path, int|void max, mixed|void curren
 		
 		 if(sizeof(list) < total)
 		 {
-			 list = get_paged_result(path, max, current, list);
+			 list = get_paged_result(path, vars, max, current, list);
 		 }
 		 
          return list;
@@ -435,10 +438,20 @@ protected ADT.List get_paged_result(string path, int|void max, mixed|void curren
      else if(status >= 400) handle_error(d);
 }
 
+protected string expand_path(string path) {
+	if(has_prefix(path, "~~"))
+	  return Stdio.append_path("/" + login, path[2..]);
+	else if(!path || !sizeof(path) || path[0] != '/')
+	  throw(Error.Generic("Path must be absolute.\n"));
+	else if(sizeof(path) > 1)  
+	  return Stdio.append_path("/", path);
+	else throw(Error.Generic("Path must include account ID.\n"));
+}
+
 // assumes that var keys are http valid without as-is; values will be encoded.
 protected Standards.URI generate_uri(string path, mapping|void vars) {
-    Standards.URI op = Standards.URI(endpoint); 
-    op->path = Stdio.append_path("/" + login, path);
+    Standards.URI op = Standards.URI(endpoint);
+	op->path = expand_path(path);
     
     if(vars) {
       array x = allocate(sizeof(vars));

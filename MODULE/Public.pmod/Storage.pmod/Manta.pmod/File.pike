@@ -20,7 +20,7 @@ this_program dup() {
 int(-1..) write(string|array(string) str, mixed ... extra) {
   int res = ::write(str, @extra);
   werror("res: %O\n", res);
-  client->put_object(p, data, ct);
+  client->put_object(combine_path("/", p), data, ct);
   return res;
 }
 
