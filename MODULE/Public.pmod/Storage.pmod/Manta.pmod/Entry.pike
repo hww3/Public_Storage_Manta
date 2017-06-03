@@ -38,4 +38,4 @@ int is_obj() { return type == "object"; }
 //!
 int is_dir() { return type == "directory"; }
 
-string _sprintf(int i, void | mapping(string:int)m) { return "Entry(" + name + ")";}
+string _sprintf(int i, void | mapping(string:int)m) { return "Entry(" + type + ":" +  parent + "/" + name + ")";}

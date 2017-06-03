@@ -314,7 +314,15 @@ array(.Entry) list_jobs(int|void live) {
 //!
 mapping get_job(Standards.URI|string job_uri) {
   mixed m = get_job_data(job_uri, "/live/status");
-  if(m) return Standards.JSON.decode(m[0]);
+  if(!m) return 0; // this shouldn't happen, really
+  mapping res = Standards.JSON.decode(m[0]);
+  if(res->phases && sizeof(res->phases)) {
+	  foreach(res->phases; int i; mapping v) {
+		  res->phases[i] = .JobPhase(v);
+	  }
+  }
+  
+  return res;
 }
 
 //!
