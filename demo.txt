@@ -1,0 +1,8 @@
+string s = Stdio.read_file("/home/ubuntu/.ssh/id_rsa");
+string p = Stdio.read_file("/home/ubuntu/.ssh/id_rsa.pub");
+object c = Public.Storage.Manta.client("https://us-east.manta.joyent.com", "myUser", s, p);
+
+or
+
+object c = Public.Storage.Manta.client_from_keys("https://us-east.manta.joyent.com", 
+                                                 "myUser", "/home/ubuntu/.ssh/id_rsa" [, keypass]);
