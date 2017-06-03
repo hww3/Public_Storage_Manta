@@ -17,6 +17,7 @@ this_program dup() {
   return this_program(client, p, ct, data, make_type_str(), ptr);
 }
 
+//!
 int(-1..) write(string|array(string) str, mixed ... extra) {
   int res = ::write(str, @extra);
   werror("res: %O\n", res);
@@ -29,7 +30,7 @@ string get_content_type() {
   return ct;
 }  
 
-//!
+//! 
 void set_content_type(string content_type) {
   ct = content_type;
 }

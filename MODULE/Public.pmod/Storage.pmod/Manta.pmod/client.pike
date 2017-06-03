@@ -413,12 +413,13 @@ protected ADT.List get_paged_result(string path, mapping|void vars, int|void max
     int status = d->status();
 
     if(status == 200) {
+        string ct = get_content_type(d);         
+        if(ct != "application/x-json-stream" && get_content_subtype(d) != "directory")
+          throw(.Error.NotDirectoryError(uri->path + " is not a directory.\n"));
+
          int total = (int)(d->headers()["result-set-size"]);
 		 if(!total) return list; // no results
-         string ct = get_content_type(d);         
-         if(ct != "application/x-json-stream")
-           throw(Error.Generic("Invalid response content-type: " + ct + "\n"));
-		 if(max && max < total) total = max;
+         if(max && max < total) total = max;
 		 path = uri->path;
          foreach(d->data()/"\n"; int r; string j) {
          if(!sizeof(j)) continue;
