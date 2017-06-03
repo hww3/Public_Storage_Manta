@@ -23,7 +23,13 @@ void create(string url, string username, string private_key, string public_key, 
    keyId = "/" + login + "/keys/" + Public.Storage.Manta.generate_fingerprint(public_key);
 }
 
+//! create a directory
 //!
+//! @param directoy
+//!  path to create
+//! 
+//! @note
+//!  all paths are relative to the user's account root.
 int put_directory(string directory) {
     Standards.URI op = generate_uri(directory);
 	
@@ -39,10 +45,22 @@ int put_directory(string directory) {
 	else return 0;	
 }
 
+//! delete an object
 //!
+//! @param directoy
+//!  path to delete
+//! 
+//! @note
+//!  all paths are relative to the user's account root.
 function(string:int) delete_object = delete_directory;
 
+//! delete a directory
 //!
+//! @param directoy
+//!  path to delete
+//! 
+//! @note
+//!  all paths are relative to the user's account root.
 int delete_directory(string directory) {
     Standards.URI op = generate_uri(directory);
 	
@@ -58,14 +76,26 @@ int delete_directory(string directory) {
 	else return 0;	
 }
 
+//! list the contents of a directory 
 //!
+//! @param directory
+//!  path to list
+//! 
+//! @note
+//!  all paths are relative to the user's account root.
 mixed list_directory(string directory) {
 
    mixed r = get_paged_result(directory);
    return (array)r;
 }
 
+//! get an object
 //!
+//! @param path
+//!  path to get
+//! 
+//! @note
+//!  all paths are relative to the user's account root.
 mixed get_object(string path) {
     Standards.URI op = generate_uri(path);
 
@@ -80,7 +110,12 @@ mixed get_object(string path) {
 	else return 0;	
 }
 
-//!
+//! put or overwrite an object
+//! @param path
+//! path to create
+//! 
+//! @note
+//!  all paths are relative to the user's account root.
 int put_object(string path, string content, string content_type, void|mapping headers) {
     Standards.URI op = generate_uri(path);
 	
@@ -101,7 +136,13 @@ int put_object(string path, string content, string content_type, void|mapping he
 	else return 0;	
 }
 
+//! replace all metadata for a path
 //!
+//! @param path
+//!  path of object to update
+//!
+//! @note
+//!  all paths are relative to the user's account root.
 int put_metadata(string path, mapping headers) {
     Standards.URI op = generate_uri(path, (["metadata": "true"]));
     
@@ -115,7 +156,16 @@ int put_metadata(string path, mapping headers) {
 	else return 0;	
 }
 
+//! create a link
 //!
+//! @param destPath
+//!  destination path to create
+//! 
+//! @param srcPath
+//!  path of source object
+//!
+//! @note
+//!  all paths are relative to the user's account root.
 int put_snaplink(string destPath, string srcPath) {
     Standards.URI op = generate_uri(destPath);
 	
@@ -132,7 +182,15 @@ int put_snaplink(string destPath, string srcPath) {
 	else return 0;	
 }
 
+//! check if a path is a directory
+//! 
+//! @note
+//! results for existance and type are cached for a short period, so there is 
+//! no additional network overhead when calling @[exists] and @[is_directory]
+//! in rapid succession.
 //!
+//! @note
+//!  all paths are relative to the user's account root.
 int is_directory(string path) {
 	mixed obj;
     mixed err;
@@ -145,7 +203,15 @@ int is_directory(string path) {
 		else return 0;
 }
 
+//! check if a path exists
+//! 
+//! @note
+//! results for existance and type are cached for a short period, so there is 
+//! no additional network overhead when calling @[exists] and @[is_directory]
+//! in rapid succession.
 //!
+//! @note
+//!  all paths are relative to the user's account root.
 int exists(string path) {
 	mixed obj;
     mixed err;
