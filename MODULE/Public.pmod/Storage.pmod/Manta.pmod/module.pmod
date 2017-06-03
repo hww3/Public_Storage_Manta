@@ -7,6 +7,10 @@
 //! Joyent Public Cloud Manta Endpoint
 constant MANTA_US_EAST = "https://us-east.manta.joyent.com";
 
+
+constant __version = "@@version@@";
+constant __author = "@@author@@";
+
 //! create a Manta client using SSH key files on disk.
 //! 
 //! @param url
