@@ -1,4 +1,8 @@
+//! An interface to the Joyent Manta Object Store and Compute Service.
 //!
+//! This module supports both the Joyent public cloud as well as privately hosted Manta instances.
+//!
+//! For details, see https://apidocs.joyent.com/manta/
 
 //! Joyent Public Cloud Manta Endpoint
 constant MANTA_US_EAST = "https://us-east.manta.joyent.com";
