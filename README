@@ -2,3 +2,16 @@ This is a module providing support for the Joyent Manta object storage and compu
 Included are a client capable of communicating with a Manta storage fabric, as well as a 
 Filesystem module.
 
+Example:
+
+```
+#!pike
+
+
+object c = Public.Storage.Manta.client_from_keys("https://us-east.manta.joyent.com", 
+                                                 "myUser", "/home/ubuntu/.ssh/id_rsa" [, keypass]);
+
+array entries = c->list_directory("~~/stor");
+
+
+```
