@@ -112,6 +112,10 @@ mixed get_object(string path) {
 	else return 0;	
 }
 
+headent get_metadata(string path) {
+	return head_object(path);
+}
+
 //! put or overwrite an object
 //! @param path
 //! path to create
